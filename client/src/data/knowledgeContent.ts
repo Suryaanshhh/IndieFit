@@ -501,3 +501,6 @@ export const knowledgeContent: KnowledgeContent[] = [
     ],
   },
 ];
+
+
+export const knowledgeContents = knowledgeContent;

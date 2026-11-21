@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { OneRMCalculator } from './OneRMCalculator';
 import { TDEECalculator } from './TDEECalculator';
 import { VolumeTracker } from './VolumeTracker';
@@ -7,6 +8,18 @@ type Tab = '1RM Calculator' | 'TDEE & Macros' | 'Volume Tracker';
 
 const TABS: Tab[] = ['1RM Calculator', 'TDEE & Macros', 'Volume Tracker'];
 
+const TAB_MAP: Record<string, Tab> = {
+  '1rm': '1RM Calculator',
+  'tdee': 'TDEE & Macros',
+  'volume': 'Volume Tracker',
+};
+
+const REVERSE_TAB_MAP: Record<Tab, string> = {
+  '1RM Calculator': '1rm',
+  'TDEE & Macros': 'tdee',
+  'Volume Tracker': 'volume',
+};
+
 const TAB_DESCRIPTIONS: Record<Tab, string> = {
   '1RM Calculator': 'Estimate your one-rep max from any set using peer-reviewed formulas.',
   'TDEE & Macros':  'Calculate your daily energy needs and macro targets based on your stats and goal.',
@@ -14,7 +27,21 @@ const TAB_DESCRIPTIONS: Record<Tab, string> = {
 };
 
 export function ToolsPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('1RM Calculator');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const initialTab: Tab = (tabParam && TAB_MAP[tabParam]) ? TAB_MAP[tabParam] : '1RM Calculator';
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+
+  useEffect(() => {
+    if (tabParam && TAB_MAP[tabParam]) {
+      setActiveTab(TAB_MAP[tabParam]);
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (tab: Tab) => {
+    setActiveTab(tab);
+    setSearchParams({ tab: REVERSE_TAB_MAP[tab] });
+  };
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 16px 80px' }}>
@@ -51,7 +78,7 @@ export function ToolsPage() {
             return (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => handleTabChange(tab)}
                 style={{
                   position: 'relative',
                   padding: '0 20px 14px',

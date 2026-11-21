@@ -134,10 +134,10 @@ export function HomePage() {
         </div>
 
         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {tools.map(({ id, title, description, icon }) => {
+          {tools.map(({ id, title, description, icon, slug }) => {
             const Icon = ICON_MAP[icon] ?? Dumbbell;
             return (
-              <Link key={id} to="/tools">
+              <Link key={id} to={`/tools?tab=${slug}`}>
                 <Card hover className="h-full flex flex-col gap-4">
                   {/* Icon container: outer card is rounded-[14px] p-5, icon bg needs inner radius */}
                   <div

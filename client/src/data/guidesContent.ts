@@ -381,3 +381,6 @@ export const guidesContent: GuideContent[] = [
     ],
   },
 ];
+
+
+export const guideContents = guidesContent;
