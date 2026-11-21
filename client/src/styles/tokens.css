@@ -1,0 +1,55 @@
+/* IndieFit Design Tokens */
+@import "tailwindcss";
+
+:root {
+  /* Surfaces */
+  --color-base:     #111317;
+  --color-elevated: #181B20;
+  --color-card:     #1E222A;
+
+  /* Text & borders */
+  --color-text-primary:   #EEF2F7;
+  --color-text-secondary: #B4BDC9;
+  --color-text-muted:     #7C8694;
+  --color-border:         rgba(238, 242, 247, 0.10);
+
+  /* Brand */
+  --color-signal-red:       #E11D2A;
+  --color-signal-red-hover: #C91420;
+
+  /* Radius scale (concentric — outer = inner + padding) */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   18px;
+  --radius-2xl:  22px;
+  --radius-pill: 9999px;
+}
+
+/* Root typography */
+html {
+  background-color: var(--color-base);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+  background-color: var(--color-base);
+}
+
+/* Global text wrapping */
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: balance;
+}
+
+p, li, blockquote {
+  text-wrap: pretty;
+}
+
+/* Tabular nums for metric displays */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
