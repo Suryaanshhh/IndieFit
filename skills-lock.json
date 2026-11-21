@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "skills": {
+    "make-interfaces-feel-better": {
+      "source": "jakubkrehel/make-interfaces-feel-better",
+      "commit": "6d9f2f1df10e8ce2ae1708598a73b0506fb98794",
+      "sourceType": "github",
+      "skillPath": "skills/make-interfaces-feel-better/SKILL.md",
+      "computedHash": "076aa566b86b44e1691a4167ea88a85d6853c5f2eb00c39cc719ce5fa21d0731"
+    },
+    "no-ai-slop": {
+      "source": "petergyang/no-ai-slop",
+      "commit": "000650b156983f5159695b441477f4e63b25dc85",
+      "sourceType": "github",
+      "skillPath": "skills/no-ai-slop/SKILL.md",
+      "computedHash": "325408c3843e4a9d148a439fa665a0722d1248e23da8ef84646c9647ff4b3f88"
+    },
+    "unslop": {
+      "source": "heydamir/unslop",
+      "commit": "620163eedb3529d9cd23a3994ed8d287d06f760d",
+      "sourceType": "github",
+      "skillPath": "skills/unslop/SKILL.md",
+      "computedHash": "34b16270083f9892424a0b41dec4d5f25a73709c9cffa7702e57c723000e6df5"
+    }
+  }
+}
