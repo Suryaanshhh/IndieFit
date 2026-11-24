@@ -2,27 +2,31 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OneRMCalculator } from './OneRMCalculator';
 import { TDEECalculator } from './TDEECalculator';
+import { BodyFatCalculator } from './BodyFatCalculator';
 import { VolumeTracker } from './VolumeTracker';
 
-type Tab = '1RM Calculator' | 'TDEE & Macros' | 'Volume Tracker';
+type Tab = '1RM Calculator' | 'TDEE & Macros' | 'Body Fat' | 'Volume Tracker';
 
-const TABS: Tab[] = ['1RM Calculator', 'TDEE & Macros', 'Volume Tracker'];
+const TABS: Tab[] = ['1RM Calculator', 'TDEE & Macros', 'Body Fat', 'Volume Tracker'];
 
 const TAB_MAP: Record<string, Tab> = {
   '1rm': '1RM Calculator',
   'tdee': 'TDEE & Macros',
+  'bodyfat': 'Body Fat',
   'volume': 'Volume Tracker',
 };
 
 const REVERSE_TAB_MAP: Record<Tab, string> = {
   '1RM Calculator': '1rm',
   'TDEE & Macros': 'tdee',
+  'Body Fat': 'bodyfat',
   'Volume Tracker': 'volume',
 };
 
 const TAB_DESCRIPTIONS: Record<Tab, string> = {
   '1RM Calculator': 'Estimate your one-rep max from any set using peer-reviewed formulas.',
-  'TDEE & Macros':  'Calculate your daily energy needs and macro targets based on your stats and goal.',
+  'TDEE & Macros': 'Calculate your daily energy needs and macro targets based on your stats and goal.',
+  'Body Fat': 'Estimate your body fat percentage from simple tape measurements, with a cross-check.',
   'Volume Tracker': 'Track sets per muscle group against MEV, MAV, and MRV landmarks.',
 };
 
@@ -118,7 +122,8 @@ export function ToolsPage() {
       {/* Active tool */}
       <div>
         {activeTab === '1RM Calculator' && <OneRMCalculator />}
-        {activeTab === 'TDEE & Macros'  && <TDEECalculator />}
+        {activeTab === 'TDEE & Macros' && <TDEECalculator />}
+        {activeTab === 'Body Fat' && <BodyFatCalculator />}
         {activeTab === 'Volume Tracker' && <VolumeTracker />}
       </div>
     </div>
