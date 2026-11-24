@@ -3,26 +3,26 @@
 
 :root {
   /* Surfaces */
-  --color-base:     #111317;
+  --color-base: #111317;
   --color-elevated: #181B20;
-  --color-card:     #1E222A;
+  --color-card: #1E222A;
 
   /* Text & borders */
-  --color-text-primary:   #EEF2F7;
+  --color-text-primary: #EEF2F7;
   --color-text-secondary: #B4BDC9;
-  --color-text-muted:     #7C8694;
-  --color-border:         rgba(238, 242, 247, 0.10);
+  --color-text-muted: #7C8694;
+  --color-border: rgba(238, 242, 247, 0.10);
 
   /* Brand */
-  --color-signal-red:       #E11D2A;
+  --color-signal-red: #E11D2A;
   --color-signal-red-hover: #C91420;
 
   /* Radius scale (concentric — outer = inner + padding) */
-  --radius-sm:   6px;
-  --radius-md:   10px;
-  --radius-lg:   14px;
-  --radius-xl:   18px;
-  --radius-2xl:  22px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 22px;
   --radius-pill: 9999px;
 }
 
@@ -41,15 +41,37 @@ body {
 }
 
 /* Global text wrapping */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   text-wrap: balance;
 }
 
-p, li, blockquote {
+p,
+li,
+blockquote {
   text-wrap: pretty;
 }
 
 /* Tabular nums for metric displays */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+.font-display {
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.hero-arch {
+  border-radius: 999px 999px 18px 18px;
+  background:
+    radial-gradient(120% 60% at 50% 100%, rgba(225, 29, 42, 0.5) 0%, rgba(225, 29, 42, 0) 60%),
+    linear-gradient(180deg, #1E222A 0%, #111317 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 40px 80px -30px rgba(225, 29, 42, 0.35);
 }

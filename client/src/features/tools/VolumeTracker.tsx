@@ -1,5 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Badge } from '../../components/Badge';
+
+/* ─────────────────────────── Data ─────────────────────────── */
 
 type Muscle =
   | 'Chest' | 'Back' | 'Quads' | 'Hamstrings' | 'Shoulders'
@@ -10,174 +12,182 @@ const MUSCLES: Muscle[] = [
   'Biceps', 'Triceps', 'Calves', 'Abs',
 ];
 
-const MEV: Record<Muscle, number> = {
-  Chest: 8, Back: 10, Quads: 8, Hamstrings: 6, Shoulders: 6,
-  Biceps: 8, Triceps: 6, Calves: 8, Abs: 0,
-};
-const MAV: Record<Muscle, number> = {
-  Chest: 12, Back: 16, Quads: 12, Hamstrings: 10, Shoulders: 10,
-  Biceps: 12, Triceps: 10, Calves: 12, Abs: 16,
-};
-const MRV: Record<Muscle, number> = {
-  Chest: 20, Back: 25, Quads: 20, Hamstrings: 16, Shoulders: 20,
-  Biceps: 20, Triceps: 16, Calves: 20, Abs: 25,
+type Landmarks = { mv: number; mev: number; mav: number; mrv: number };
+
+// Baseline = intermediate lifter, weekly hard sets, training each muscle ~2x/week.
+// These are coaching-derived estimates, not lab-measured thresholds.
+const BASE: Record<Muscle, Landmarks> = {
+  Chest: { mv: 6, mev: 8, mav: 12, mrv: 20 },
+  Back: { mv: 6, mev: 10, mav: 16, mrv: 25 },
+  Quads: { mv: 6, mev: 8, mav: 12, mrv: 20 },
+  Hamstrings: { mv: 4, mev: 6, mav: 10, mrv: 16 },
+  Shoulders: { mv: 6, mev: 6, mav: 10, mrv: 20 },
+  Biceps: { mv: 4, mev: 8, mav: 12, mrv: 20 },
+  Triceps: { mv: 4, mev: 6, mav: 10, mrv: 16 },
+  Calves: { mv: 6, mev: 8, mav: 12, mrv: 20 },
+  Abs: { mv: 0, mev: 0, mav: 16, mrv: 25 },
 };
 
-const STORAGE_KEY = 'indiefit-volume-v1';
+type Level = 'beginner' | 'intermediate' | 'advanced';
+type Recovery = 'poor' | 'okay' | 'good';
 
-function loadVolume(): Record<Muscle, number> {
+// Beginners grow on less and recover from less; advanced lifters need more to keep progressing.
+const LEVEL_SCALE: Record<Level, { mv: number; mev: number; mav: number; mrv: number }> = {
+  beginner: { mv: 0.8, mev: 0.75, mav: 0.8, mrv: 0.85 },
+  intermediate: { mv: 1, mev: 1, mav: 1, mrv: 1 },
+  advanced: { mv: 1, mev: 1.15, mav: 1.1, mrv: 1.1 },
+};
+
+function getLandmarks(muscle: Muscle, level: Level): Landmarks {
+  const b = BASE[muscle];
+  const s = LEVEL_SCALE[level];
+  return {
+    mv: Math.round(b.mv * s.mv),
+    mev: Math.round(b.mev * s.mev),
+    mav: Math.round(b.mav * s.mav),
+    mrv: Math.round(b.mrv * s.mrv),
+  };
+}
+
+/* ─────────────────────────── Storage ─────────────────────────── */
+
+const STORAGE_KEY = 'indiefit-volume-v2';
+const LEGACY_KEY = 'indiefit-volume-v1';
+
+type SavedState = { volume: Record<Muscle, number>; level: Level; recovery: Recovery };
+
+const emptyVolume = () => {
+  const v = {} as Record<Muscle, number>;
+  for (const m of MUSCLES) v[m] = 0;
+  return v;
+};
+
+function readVolume(raw: any): Record<Muscle, number> {
+  const v = emptyVolume();
+  if (raw && typeof raw === 'object') {
+    for (const m of MUSCLES) if (typeof raw[m] === 'number' && raw[m] >= 0) v[m] = raw[m];
+  }
+  return v;
+}
+
+function loadState(): SavedState {
+  const fallback: SavedState = { volume: emptyVolume(), level: 'intermediate', recovery: 'okay' };
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      const parsed = JSON.parse(saved);
-      const result = {} as Record<Muscle, number>;
-      for (const m of MUSCLES) {
-        result[m] = typeof parsed[m] === 'number' ? parsed[m] : 0;
-      }
-      return result;
+      const p = JSON.parse(saved);
+      return {
+        volume: readVolume(p.volume),
+        level: ['beginner', 'intermediate', 'advanced'].includes(p.level) ? p.level : 'intermediate',
+        recovery: ['poor', 'okay', 'good'].includes(p.recovery) ? p.recovery : 'okay',
+      };
     }
-  } catch {}
-  const defaults = {} as Record<Muscle, number>;
-  for (const m of MUSCLES) defaults[m] = 0;
-  return defaults;
+    // Migrate sets from the old version of the tracker
+    const legacy = localStorage.getItem(LEGACY_KEY);
+    if (legacy) return { ...fallback, volume: readVolume(JSON.parse(legacy)) };
+  } catch { }
+  return fallback;
 }
 
-type Status = 'below' | 'mev' | 'mav' | 'mrv';
+/* ─────────────────────────── Logic ─────────────────────────── */
 
-function getStatus(muscle: Muscle, sets: number): Status {
-  if (sets >= MRV[muscle]) return 'mrv';
-  if (sets >= MAV[muscle]) return 'mav';
-  if (sets >= MEV[muscle]) return 'mev';
+type Status = 'below' | 'mev' | 'mav' | 'high' | 'mrv';
+
+function getStatus(sets: number, lm: Landmarks): Status {
+  if (sets >= lm.mrv) return 'mrv';
+  if (sets >= lm.mav && sets >= lm.mrv - 2) return 'high'; // within 2 sets of your ceiling
+  if (sets >= lm.mav) return 'mav';
+  if (sets >= lm.mev && sets > 0) return 'mev';
   return 'below';
 }
+
+// Mesocycle logic: start at MEV, add sets while recovery allows, deload at the ceiling
+// or when recovery is poor and volume is already high.
+function getAdvice(sets: number, lm: Landmarks, recovery: Recovery): string {
+  const deload = Math.max(lm.mv, Math.round(sets * 0.5));
+  if (sets >= lm.mrv) return `Deload → ${deload}`;
+  if (recovery === 'poor') return sets >= lm.mav ? `Deload → ${deload}` : `Hold at ${sets}`;
+  if (sets === 0 && lm.mev > 0) return `Start → ${lm.mev}`;
+  if (sets < lm.mev) return `Build → ${Math.min(lm.mev, sets + 2)}`;
+  const step = recovery === 'good' ? 2 : 1;
+  return `Add → ${Math.min(lm.mrv, sets + step)}`;
+}
+
+/* ─────────────────────────── UI pieces ─────────────────────────── */
 
 function StatusBadge({ status }: { status: Status }) {
   const labels: Record<Status, string> = {
     below: 'Below MEV',
-    mev:   'MEV',
-    mav:   'MAV',
-    mrv:   'MRV — recover',
+    mev: 'Growing',
+    mav: 'Optimal',
+    high: 'Near limit',
+    mrv: 'At MRV',
   };
   const variants: Record<Status, 'muted' | 'default' | 'red'> = {
     below: 'muted',
-    mev:   'default',
-    mav:   'red',
-    mrv:   'red',
+    mev: 'default',
+    mav: 'red',
+    high: 'red',
+    mrv: 'red',
   };
   return <Badge variant={variants[status]}>{labels[status]}</Badge>;
 }
 
-function LandmarkBar({ muscle, sets }: { muscle: Muscle; sets: number }) {
-  const max = MRV[muscle] + 4; // a bit of breathing room
-  const clampedSets = Math.min(sets, max);
-  const fillPct = max > 0 ? (clampedSets / max) * 100 : 0;
-
-  const mevPct  = (MEV[muscle] / max) * 100;
-  const mavPct  = (MAV[muscle] / max) * 100;
-  const mrvPct  = (MRV[muscle] / max) * 100;
-
-  const status = getStatus(muscle, sets);
+function LandmarkBar({ lm, sets, status }: { lm: Landmarks; sets: number; status: Status }) {
+  const max = lm.mrv + 4;
+  const fillPct = Math.min((sets / max) * 100, 100);
   const fillColor =
     status === 'below' ? 'var(--color-text-muted)' :
-    status === 'mev'   ? 'var(--color-text-secondary)' :
-    status === 'mav'   ? 'var(--color-signal-red)' :
-                         'var(--color-signal-red)';
+      status === 'mev' ? 'var(--color-text-secondary)' :
+        'var(--color-signal-red)';
+
+  const marker = (value: number, color: string, label: string) => (
+    <div
+      title={`${label}: ${value}`}
+      style={{
+        position: 'absolute',
+        left: `${(value / max) * 100}%`,
+        top: '-2px',
+        width: '2px',
+        height: '10px',
+        borderRadius: '1px',
+        backgroundColor: color,
+        transform: 'translateX(-50%)',
+      }}
+    />
+  );
 
   return (
-    <div style={{ position: 'relative', height: '6px', borderRadius: '3px', backgroundColor: 'var(--color-base)', overflow: 'visible' }}>
-      {/* Fill */}
+    <div style={{ position: 'relative', height: '6px', borderRadius: '3px', backgroundColor: 'var(--color-base)' }}>
       <div
         style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          height: '100%',
-          width: `${Math.min(fillPct, 100)}%`,
-          borderRadius: '3px',
-          backgroundColor: fillColor,
+          position: 'absolute', left: 0, top: 0, height: '100%',
+          width: `${fillPct}%`, borderRadius: '3px', backgroundColor: fillColor,
           transition: 'width 200ms ease, background-color 200ms',
         }}
       />
-      {/* MEV marker */}
-      {MEV[muscle] > 0 && (
-        <div
-          title={`MEV: ${MEV[muscle]}`}
-          style={{
-            position: 'absolute',
-            left: `${mevPct}%`,
-            top: '-2px',
-            width: '2px',
-            height: '10px',
-            borderRadius: '1px',
-            backgroundColor: 'var(--color-text-muted)',
-            transform: 'translateX(-50%)',
-          }}
-        />
-      )}
-      {/* MAV marker */}
-      <div
-        title={`MAV: ${MAV[muscle]}`}
-        style={{
-          position: 'absolute',
-          left: `${mavPct}%`,
-          top: '-2px',
-          width: '2px',
-          height: '10px',
-          borderRadius: '1px',
-          backgroundColor: 'var(--color-text-secondary)',
-          transform: 'translateX(-50%)',
-        }}
-      />
-      {/* MRV marker */}
-      <div
-        title={`MRV: ${MRV[muscle]}`}
-        style={{
-          position: 'absolute',
-          left: `${mrvPct}%`,
-          top: '-2px',
-          width: '2px',
-          height: '10px',
-          borderRadius: '1px',
-          backgroundColor: 'var(--color-signal-red)',
-          transform: 'translateX(-50%)',
-        }}
-      />
+      {lm.mev > 0 && marker(lm.mev, 'var(--color-text-muted)', 'MEV')}
+      {marker(lm.mav, 'var(--color-text-secondary)', 'MAV')}
+      {marker(lm.mrv, 'var(--color-signal-red)', 'MRV')}
     </div>
   );
 }
 
 function StepperButton({
-  onClick,
-  label,
-  disabled,
-}: {
-  onClick: () => void;
-  label: string;
-  disabled?: boolean;
-}) {
+  onClick, label, symbol, disabled,
+}: { onClick: () => void; label: string; symbol: string; disabled?: boolean }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
       style={{
-        width: '40px',
-        height: '40px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: '10px',
-        border: '1px solid var(--color-border)',
-        backgroundColor: 'var(--color-base)',
+        width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: '10px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-base)',
         color: disabled ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
-        fontSize: '18px',
-        fontWeight: 500,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.4 : 1,
-        transition: 'color 150ms, background-color 150ms, border-color 150ms',
-        userSelect: 'none',
-        lineHeight: 1,
-        flexShrink: 0,
+        fontSize: '20px', fontWeight: 500, cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1, transition: 'color 150ms, background-color 150ms, border-color 150ms',
+        userSelect: 'none', lineHeight: 1, flexShrink: 0, padding: 0,
       }}
       onMouseEnter={e => {
         if (!disabled) {
@@ -192,31 +202,110 @@ function StepperButton({
         }
       }}
     >
-      {label}
+      {symbol}
     </button>
   );
 }
 
+function Segmented<T extends string>({
+  label, value, options, onChange,
+}: { label: string; value: T; options: { value: T; text: string }[]; onChange: (v: T) => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        {label}
+      </span>
+      <div
+        role="group"
+        aria-label={label}
+        style={{ display: 'flex', padding: '3px', gap: '2px', borderRadius: '10px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-base)' }}
+      >
+        {options.map(o => {
+          const active = o.value === value;
+          return (
+            <button
+              key={o.value}
+              aria-pressed={active}
+              onClick={() => onChange(o.value)}
+              style={{
+                height: '32px', padding: '0 14px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                fontSize: '13px', fontWeight: 600,
+                backgroundColor: active ? 'var(--color-card)' : 'transparent',
+                color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+                transition: 'color 150ms, background-color 150ms',
+              }}
+            >
+              {o.text}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: color, flexShrink: 0 }} />
+      <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{label}</span>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Main ─────────────────────────── */
+
 export function VolumeTracker() {
-  const [volume, setVolume] = useState<Record<Muscle, number>>(loadVolume);
+  const [state, setState] = useState<SavedState>(loadState);
+  const { volume, level, recovery } = state;
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { }
+  }, [state]);
+
+  const landmarks = useMemo(() => {
+    const out = {} as Record<Muscle, Landmarks>;
+    for (const m of MUSCLES) out[m] = getLandmarks(m, level);
+    return out;
+  }, [level]);
 
   const updateVolume = useCallback((muscle: Muscle, delta: number) => {
-    setVolume(prev => {
-      const next = { ...prev, [muscle]: Math.max(0, prev[muscle] + delta) };
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      volume: { ...prev.volume, [muscle]: Math.max(0, prev.volume[muscle] + delta) },
+    }));
   }, []);
 
-  const reset = () => {
-    const defaults = {} as Record<Muscle, number>;
-    for (const m of MUSCLES) defaults[m] = 0;
-    setVolume(defaults);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults)); } catch {}
-  };
+  const reset = () => setState(prev => ({ ...prev, volume: emptyVolume() }));
+
+  const colTemplate = '1fr auto 120px 100px';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Settings */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-end' }}>
+        <Segmented<Level>
+          label="Training experience"
+          value={level}
+          onChange={v => setState(prev => ({ ...prev, level: v }))}
+          options={[
+            { value: 'beginner', text: 'Beginner' },
+            { value: 'intermediate', text: 'Intermediate' },
+            { value: 'advanced', text: 'Advanced' },
+          ]}
+        />
+        <Segmented<Recovery>
+          label="Recovery this week"
+          value={recovery}
+          onChange={v => setState(prev => ({ ...prev, recovery: v }))}
+          options={[
+            { value: 'poor', text: 'Poor' },
+            { value: 'okay', text: 'Okay' },
+            { value: 'good', text: 'Good' },
+          ]}
+        />
+      </div>
+
       {/* Legend + reset */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
@@ -227,16 +316,9 @@ export function VolumeTracker() {
         <button
           onClick={reset}
           style={{
-            height: '36px',
-            padding: '0 14px',
-            borderRadius: '8px',
-            fontSize: '12px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            border: '1px solid var(--color-border)',
-            backgroundColor: 'transparent',
-            color: 'var(--color-text-muted)',
-            transition: 'color 150ms, border-color 150ms',
+            height: '36px', padding: '0 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600,
+            cursor: 'pointer', border: '1px solid var(--color-border)', backgroundColor: 'transparent',
+            color: 'var(--color-text-muted)', transition: 'color 150ms, border-color 150ms',
           }}
           onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-text-primary)'; e.currentTarget.style.borderColor = 'var(--color-text-muted)'; }}
           onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-muted)'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}
@@ -246,102 +328,56 @@ export function VolumeTracker() {
       </div>
 
       {/* Table panel */}
-      <div
-        style={{
-          backgroundColor: 'var(--color-card)',
-          border: '1px solid var(--color-border)',
-          borderRadius: '18px',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Header */}
+      <div style={{ backgroundColor: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: '18px', overflow: 'hidden' }}>
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr auto 120px 100px',
-            gap: '16px',
-            padding: '12px 20px',
-            borderBottom: '1px solid var(--color-border)',
+            display: 'grid', gridTemplateColumns: colTemplate, gap: '16px',
+            padding: '12px 20px', borderBottom: '1px solid var(--color-border)',
           }}
         >
-          {['Muscle group', 'Sets / week', 'Landmark', 'Status'].map(h => (
-            <span
-              key={h}
-              style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                color: 'var(--color-text-muted)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}
-            >
+          {['Muscle group', 'Sets / week', 'Next week', 'Status'].map(h => (
+            <span key={h} style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {h}
             </span>
           ))}
         </div>
 
         {MUSCLES.map((muscle, idx) => {
-          const sets   = volume[muscle];
-          const status = getStatus(muscle, sets);
-          const isMRV  = status === 'mrv';
+          const sets = volume[muscle];
+          const lm = landmarks[muscle];
+          const status = getStatus(sets, lm);
 
           return (
             <div
               key={muscle}
               style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto 120px 100px',
-                gap: '16px',
-                padding: '14px 20px',
-                alignItems: 'center',
+                display: 'grid', gridTemplateColumns: colTemplate, gap: '16px',
+                padding: '14px 20px', alignItems: 'center',
                 borderBottom: idx < MUSCLES.length - 1 ? '1px solid var(--color-border)' : 'none',
-                backgroundColor: isMRV ? 'rgba(225,29,42,0.05)' : 'transparent',
+                backgroundColor: status === 'mrv' ? 'rgba(225,29,42,0.05)' : 'transparent',
                 transition: 'background-color 200ms',
               }}
             >
-              {/* Muscle name + bar */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
-                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                  {muscle}
-                </span>
-                <LandmarkBar muscle={muscle} sets={sets} />
+                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{muscle}</span>
+                <LandmarkBar lm={lm} sets={sets} status={status} />
                 <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-                  MEV {MEV[muscle]} · MAV {MAV[muscle]} · MRV {MRV[muscle]}
+                  MEV {lm.mev} · MAV {lm.mav} · MRV {lm.mrv}
                 </span>
               </div>
 
-              {/* Stepper */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <StepperButton onClick={() => updateVolume(muscle, -1)} label="Decrease" disabled={sets === 0} />
-                <span
-                  style={{
-                    fontSize: '18px',
-                    fontWeight: 700,
-                    color: 'var(--color-text-primary)',
-                    fontVariantNumeric: 'tabular-nums',
-                    minWidth: '28px',
-                    textAlign: 'center',
-                  }}
-                >
+                <StepperButton onClick={() => updateVolume(muscle, -1)} label={`Decrease ${muscle} sets`} symbol="−" disabled={sets === 0} />
+                <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-text-primary)', fontVariantNumeric: 'tabular-nums', minWidth: '36px', textAlign: 'center' }}>
                   {sets}
                 </span>
-                <StepperButton onClick={() => updateVolume(muscle, 1)} label="Increase" />
+                <StepperButton onClick={() => updateVolume(muscle, 1)} label={`Increase ${muscle} sets`} symbol="+" />
               </div>
 
-              {/* Landmark reference */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-                  {sets < MEV[muscle]
-                    ? `+${MEV[muscle] - sets} to MEV`
-                    : sets < MAV[muscle]
-                    ? `+${MAV[muscle] - sets} to MAV`
-                    : sets < MRV[muscle]
-                    ? `+${MRV[muscle] - sets} to MRV`
-                    : `${sets - MRV[muscle]} over MRV`}
-                </span>
-              </div>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                {getAdvice(sets, lm, recovery)}
+              </span>
 
-              {/* Status badge */}
               <div>
                 <StatusBadge status={status} />
               </div>
@@ -353,19 +389,14 @@ export function VolumeTracker() {
       {/* Explanation */}
       <div
         style={{
-          backgroundColor: 'var(--color-elevated)',
-          border: '1px solid var(--color-border)',
-          borderRadius: '14px',
-          padding: '16px 20px',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: '16px',
+          backgroundColor: 'var(--color-elevated)', border: '1px solid var(--color-border)', borderRadius: '14px',
+          padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px',
         }}
       >
         {[
-          { label: 'MEV', desc: 'Minimum Effective Volume — least sets needed to maintain muscle.' },
-          { label: 'MAV', desc: 'Maximum Adaptive Volume — optimal growth zone for most people.' },
-          { label: 'MRV', desc: 'Maximum Recoverable Volume — exceeding this impairs recovery.' },
+          { label: 'MEV', desc: 'Minimum Effective Volume: the fewest weekly sets that still drive muscle growth.' },
+          { label: 'MAV', desc: 'Maximum Adaptive Volume: the range where most people grow best.' },
+          { label: 'MRV', desc: 'Maximum Recoverable Volume: the most you can recover from. Beyond it, progress stalls.' },
         ].map(item => (
           <div key={item.label}>
             <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>{item.label}</p>
@@ -373,15 +404,11 @@ export function VolumeTracker() {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
 
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: color, flexShrink: 0 }} />
-      <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{label}</span>
+      <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+        Landmarks are evidence-informed starting estimates (popularised by Renaissance Periodization), not exact limits.
+        Count hard sets taken close to failure. Adjust to your own progress, sleep and recovery.
+      </p>
     </div>
   );
 }

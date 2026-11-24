@@ -28,8 +28,7 @@ export function Navbar() {
             <img
               src="/assets/logo-indiefit.png"
               alt="IndieFit"
-              className="h-8 w-auto"
-              style={{ outline: '1px solid oklch(1 0 0 / 0.1)', borderRadius: 4 }}
+              className="h-11 w-auto"
             />
           </Link>
 
