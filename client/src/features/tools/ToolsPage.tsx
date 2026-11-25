@@ -3,16 +3,18 @@ import { useSearchParams } from 'react-router-dom';
 import { OneRMCalculator } from './OneRMCalculator';
 import { TDEECalculator } from './TDEECalculator';
 import { BodyFatCalculator } from './BodyFatCalculator';
+import { StrategyPlanner } from './StrategyPlanner';
 import { VolumeTracker } from './VolumeTracker';
 
-type Tab = '1RM Calculator' | 'TDEE & Macros' | 'Body Fat' | 'Volume Tracker';
+type Tab = '1RM Calculator' | 'TDEE & Macros' | 'Body Fat' | 'Strategy Planner' | 'Volume Tracker';
 
-const TABS: Tab[] = ['1RM Calculator', 'TDEE & Macros', 'Body Fat', 'Volume Tracker'];
+const TABS: Tab[] = ['1RM Calculator', 'TDEE & Macros', 'Body Fat', 'Strategy Planner', 'Volume Tracker'];
 
 const TAB_MAP: Record<string, Tab> = {
   '1rm': '1RM Calculator',
   'tdee': 'TDEE & Macros',
   'bodyfat': 'Body Fat',
+  'strategy': 'Strategy Planner',
   'volume': 'Volume Tracker',
 };
 
@@ -20,6 +22,7 @@ const REVERSE_TAB_MAP: Record<Tab, string> = {
   '1RM Calculator': '1rm',
   'TDEE & Macros': 'tdee',
   'Body Fat': 'bodyfat',
+  'Strategy Planner': 'strategy',
   'Volume Tracker': 'volume',
 };
 
@@ -27,6 +30,7 @@ const TAB_DESCRIPTIONS: Record<Tab, string> = {
   '1RM Calculator': 'Estimate your one-rep max from any set using peer-reviewed formulas.',
   'TDEE & Macros': 'Calculate your daily energy needs and macro targets based on your stats and goal.',
   'Body Fat': 'Estimate your body fat percentage from simple tape measurements, with a cross-check.',
+  'Strategy Planner': 'Find out whether to bulk, cut or recomp, based on your lean mass and body fat.',
   'Volume Tracker': 'Track sets per muscle group against MEV, MAV, and MRV landmarks.',
 };
 
@@ -124,6 +128,7 @@ export function ToolsPage() {
         {activeTab === '1RM Calculator' && <OneRMCalculator />}
         {activeTab === 'TDEE & Macros' && <TDEECalculator />}
         {activeTab === 'Body Fat' && <BodyFatCalculator />}
+        {activeTab === 'Strategy Planner' && <StrategyPlanner onOpenBodyFat={() => handleTabChange('Body Fat')} />}
         {activeTab === 'Volume Tracker' && <VolumeTracker />}
       </div>
     </div>
